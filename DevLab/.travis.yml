@@ -1,0 +1,49 @@
+language: php
+php:
+  - '8.0'
+services:
+  - mysql
+only:
+  - main
+  - develop
+cache:
+  directories:
+    - node_modules
+    - vendor
+jobs:
+  include:
+    - stage: build
+      before_script:
+        - cp .env.travis .env
+        - sudo mysql -e 'create database testing;'
+        - composer self-update
+      script:
+        - composer install --prefer-source --no-interaction --dev
+        - npm install
+        - php artisan migrate
+        - composer dump-autoload
+    - stage: test
+      script:
+        - composer dump-autoload
+        - php artisan test
+    - stage: lint
+      script:
+        - composer dump-autoload
+        - vendor/bin/phpstan analyse app tests
+    - stage: after
+      after_success:
+        - composer dump-autoload
+        - wget https://raw.githubusercontent.com/DiscordHooks/travis-ci-discord-webhook/master/send.sh
+        - chmod +x send.sh
+        - ./send.sh success $WEBHOOK_URL
+      after_failure:
+        - composer dump-autoload
+        - wget https://raw.githubusercontent.com/DiscordHooks/travis-ci-discord-webhook/master/send.sh
+        - chmod +x send.sh
+        - ./send.sh failure $WEBHOOK_URL
+    - stage: deploy
+      provider: heroku
+      api_key: "$HEROKU_KEY"
+      app:
+        master: "$HEROKU_APP_PROD"
+        dev: "$HEROKU_APP_DEV"
